@@ -1,2143 +1,11 @@
-d !== deviceId);
-                
-                // Update tickets that reference this device
-                this.data.tickets.forEach(ticket => {
-                    if (ticket.deviceId === deviceId) {
-                        ticket.deviceId = null;
-                    }
-                });
-                
-                // Remove associated maintenance logs
-                this.data.maintenanceLogs = this.data.maintenanceLogs.filter(l => l.deviceId !== deviceId);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('inventory-page').classList.contains('active-tab')) {
-                    this.renderInventoryPage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Device deleted successfully!');
-            },
-            
-            // Confirm delete maintenance log
-            confirmDeleteMaintenance: function(logId) {
-                this.showConfirm('Delete Maintenance Log', 'Are you sure you want to delete this maintenance log? This action cannot be undone.', () => {
-                    this.deleteMaintenance(logId);
-                });
-            },
-            
-            // Delete maintenance log
-            deleteMaintenance: function(logId) {
-                // Remove maintenance log
-                this.data.maintenanceLogs = this.data.maintenanceLogs.filter(l => l.id !== logId);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('maintenance-page').classList.contains('active-tab')) {
-                    this.renderMaintenancePage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Maintenance log deleted successfully!');
-            },
-            
-            // Confirm delete article
-            confirmDeleteArticle: function(articleId) {
-                this.showConfirm('Delete Article', 'Are you sure you want to delete this knowledge base article? This action cannot be undone.', () => {
-                    this.deleteArticle(articleId);
-                });
-            },
-            
-            // Delete article
-            deleteArticle: function(articleId) {
-                // Remove article
-                this.data.knowledgeBase = this.data.knowledgeBase.filter(a => a.id !== articleId);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Refresh data
-                if (document.getElementById('knowledge-page').classList.contains('active-tab')) {
-                    this.renderKnowledgePage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Knowledge base article deleted successfully!');
-            },
-            
-            // Search tickets
-            searchTickets: function() {
-                const searchTerm = document.getElementById('ticket-search').value.trim();
-                this.search.tickets = searchTerm;
-                this.pagination.tickets.currentPage = 1;
-                this.renderAllTickets();
-            },
-            
-            // Reset tickets search
-            resetTicketsSearch: function() {
-                document.getElementById('ticket-search').value = '';
-                this.search.tickets = '';
-                this.pagination.tickets.currentPage = 1;
-                this.renderAllTickets();
-            },
-            
-            // Search devices
-            searchDevices: function() {
-                const searchTerm = document.getElementById('device-search').value.trim();
-                this.search.devices = searchTerm;
-                this.pagination.devices.currentPage = 1;
-                this.renderAllDevices();
-            },
-            
-            // Reset devices search
-            resetDevicesSearch: function() {
-                document.getElementById('device-search').value = '';
-                this.search.devices = '';
-                this.pagination.devices.currentPage = 1;
-                this.renderAllDevices();
-            },
-            
-            // Search maintenance logs
-            searchMaintenance: function() {
-                const searchTerm = document.getElementById('maintenance-search').value.trim();
-                this.search.maintenance = searchTerm;
-                this.pagination.maintenance.currentPage = 1;
-                this.renderAllMaintenance();
-            },
-            
-            // Reset maintenance search
-            resetMaintenanceSearch: function() {
-                document.getElementById('maintenance-search').value = '';
-                this.search.maintenance = '';
-                this.pagination.maintenance.currentPage = 1;
-                this.renderAllMaintenance();
-            },
-            
-            // Search knowledge base
-            searchKnowledge: function() {
-                const searchTerm = document.getElementById('knowledge-search').value.trim();
-                this.search.knowledge = searchTerm;
-                this.pagination.knowledge.currentPage = 1;
-                this.renderAllArticles();
-            },
-            
-            // Reset knowledge search
-            resetKnowledgeSearch: function() {
-                document.getElementById('knowledge-search').value = '';
-                this.search.knowledge = '';
-                this.pagination.knowledge.currentPage = 1;
-                this.renderAllArticles();
-            },
-            
-            // Export tickets to CSV
-            exportTicketsToCSV: function() {
-                // Get filtered tickets
-                let tickets = this.data.tickets;
-                if (this.search.tickets) {
-                    const searchTerm = this.search.tickets.toLowerCase();
-                    tickets = tickets.filter(ticket => {
-                        return ticket.subject.toLowerCase().includes(searchTerm) ||
-                               ticket.description.toLowerCase().includes(searchTerm) ||
-                               this.getUserName(ticket.requesterId).toLowerCase().includes(searchTerm);
-                    });
-                }
-                
-                // Sort tickets by created date (newest first)
-                tickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                
-                // Create CSV header
-                let csv = 'ID,Subject,Status,Priority,Requester,Assigned To,Device,Created Date,Due Date\n';
-                
-                // Add rows
-                tickets.forEach(ticket => {
-                    // Get device name if exists
-                    let deviceName = 'N/A';
-                    if (ticket.deviceId) {
-                        const device = this.data.devices.find(d => d.id === ticket.deviceId);
-                        if (device) deviceName = device.name;
-                    }
-                    
-                    // Get requester name
-                    const requesterName = this.getUserName(ticket.requesterId);
-                    
-                    // Get assigned to name
-                    let assignedName = 'Unassigned';
-                    if (ticket.assignedTo) {
-                        const assigned = this.data.users.find(u => u.id === ticket.assignedTo);
-                        if (assigned) assignedName = assigned.name;
-                    }
-                    
-                    // Format dates
-                    const createdDate = new Date(ticket.createdAt);
-                    const formattedCreatedDate = this.formatDate(createdDate);
-                    
-                    let formattedDueDate = 'N/A';
-                    if (ticket.dueDate) {
-                        const dueDate = new Date(ticket.dueDate);
-                        formattedDueDate = this.formatDate(dueDate);
-                    }
-                    
-                    // Escape fields that might contain commas
-                    const escapeCsv = (field) => {
-                        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-                            return `"${field.replace(/"/g, '""')}"`;
-                        }
-                        return field;
-                    };
-                    
-                    // Add row
-                    csv += `${ticket.id},${escapeCsv(ticket.subject)},${this.formatStatus(ticket.status)},${this.formatPriority(ticket.priority)},${escapeCsv(requesterName)},${escapeCsv(assignedName)},${escapeCsv(deviceName)},${formattedCreatedDate},${formattedDueDate}\n`;
-                });
-                
-                // Create download link
-                this.downloadCSV(csv, 'tickets.csv');
-            },
-            
-            // Export devices to CSV
-            exportDevicesToCSV: function() {
-                // Get filtered devices
-                let devices = this.data.devices;
-                if (this.search.devices) {
-                    const searchTerm = this.search.devices.toLowerCase();
-                    devices = devices.filter(device => {
-                        return device.name.toLowerCase().includes(searchTerm) ||
-                               device.type.toLowerCase().includes(searchTerm) ||
-                               (device.model && device.model.toLowerCase().includes(searchTerm)) ||
-                               (device.serialNumber && device.serialNumber.toLowerCase().includes(searchTerm)) ||
-                               (device.location && device.location.toLowerCase().includes(searchTerm));
-                    });
-                }
-                
-                // Sort devices by name
-                devices.sort((a, b) => a.name.localeCompare(b.name));
-                
-                // Create CSV header
-                let csv = 'ID,Name,Type,Manufacturer,Model,Serial Number,Status,Location,Assigned To,Purchase Date,Warranty Expiry\n';
-                
-                // Add rows
-                devices.forEach(device => {
-                    // Get assigned to name
-                    let assignedName = 'Not Assigned';
-                    if (device.assignedTo) {
-                        const assigned = this.data.users.find(u => u.id === device.assignedTo);
-                        if (assigned) assignedName = assigned.name;
-                    }
-                    
-                    // Format dates
-                    let purchaseDate = 'N/A';
-                    if (device.purchaseDate) {
-                        purchaseDate = device.purchaseDate;
-                    }
-                    
-                    let warrantyExpiry = 'N/A';
-                    if (device.warrantyExpiry) {
-                        warrantyExpiry = device.warrantyExpiry;
-                    }
-                    
-                    // Escape fields that might contain commas
-                    const escapeCsv = (field) => {
-                        if (!field) return '';
-                        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-                            return `"${field.replace(/"/g, '""')}"`;
-                        }
-                        return field;
-                    };
-                    
-                    // Add row
-                    csv += `${device.id},${escapeCsv(device.name)},${this.formatDeviceType(device.type)},${escapeCsv(device.manufacturer || '')},${escapeCsv(device.model || '')},${escapeCsv(device.serialNumber || '')},${this.formatDeviceStatus(device.status)},${escapeCsv(device.location || '')},${escapeCsv(assignedName)},${purchaseDate},${warrantyExpiry}\n`;
-                });
-                
-                // Create download link
-                this.downloadCSV(csv, 'devices.csv');
-            },
-            
-            // Export all data as JSON
-            exportAllData: function() {
-                const dataStr = JSON.stringify(this.data, null, 2);
-                const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-                
-                const exportFileDefaultName = 'simpleticket_backup_' + new Date().toISOString().slice(0, 10) + '.json';
-                
-                const linkElement = document.createElement('a');
-                linkElement.setAttribute('href', dataUri);
-                linkElement.setAttribute('download', exportFileDefaultName);
-                linkElement.click();
-            },
-            
-            // Import data from JSON file
-            importData: function(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const importedData = JSON.parse(e.target.result);
-                        
-                        // Basic validation
-                        if (!importedData.tickets || !importedData.devices || !importedData.users) {
-                            this.showImportMessage('Invalid data format. Required data structures are missing.', false);
-                            return;
-                        }
-                        
-                        // Confirm import
-                        this.showConfirm('Import Data', 'This will replace all existing data. Are you sure you want to continue?', () => {
-                            this.data = importedData;
-                            this.saveToLocalStorage();
-                            
-                            // Reset pagination and search
-                            this.pagination = {
-                                tickets: { currentPage: 1, itemsPerPage: 10, totalPages: 1 },
-                                devices: { currentPage: 1, itemsPerPage: 10, totalPages: 1 },
-                                maintenance: { currentPage: 1, itemsPerPage: 10, totalPages: 1 },
-                                knowledge: { currentPage: 1, itemsPerPage: 10, totalPages: 1 }
-                            };
-                            
-                            this.search = {
-                                tickets: '',
-                                devices: '',
-                                maintenance: '',
-                                knowledge: ''
-                            };
-                            
-                            // Refresh all views
-                            this.renderDashboard();
-                            this.renderSettingsPage();
-                            
-                            // Show success message
-                            this.showAlert('Success', 'Data imported successfully!');
-                        });
-                    } catch (error) {
-                        this.showImportMessage('Error parsing the import file: ' + error.message, false);
-                    }
-                };
-                
-                reader.readAsText(file);
-                
-                // Reset file input
-                event.target.value = '';
-            },
-            
-            // Show import message
-            showImportMessage: function(message, isSuccess) {
-                const messageEl = document.getElementById('import-message');
-                messageEl.textContent = message;
-                messageEl.className = 'alert ' + (isSuccess ? 'alert-success' : 'alert-danger');
-                messageEl.style.display = 'block';
-                
-                // Hide message after 5 seconds
-                setTimeout(() => {
-                    messageEl.style.display = 'none';
-                }, 5000);
-            },
-            
-            // Save settings
-            saveSettings: function() {
-                const companyName = document.getElementById('company-name').value.trim();
-                const departmentName = document.getElementById('department-name').value.trim();
-                const defaultPriority = document.getElementById('default-priority').value;
-                
-                this.data.settings = {
-                    companyName,
-                    departmentName,
-                    defaultPriority
-                };
-                
-                this.saveToLocalStorage();
-                
-                this.showAlert('Success', 'Settings saved successfully!');
-            },
-            
-            // Download CSV file
-            downloadCSV: function(csv, filename) {
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                
-                // Create download link
-                if (navigator.msSaveBlob) { // IE 10+
-                    navigator.msSaveBlob(blob, filename);
-                } else {
-                    const url = URL.createObjectURL(blob);
-                    link.href = url;
-                    link.setAttribute('download', filename);
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-            },
-            
-            // Show alert modal
-            showAlert: function(title, message) {
-                const modal = document.getElementById('alertModal');
-                document.getElementById('alert-title').textContent = title;
-                document.getElementById('alert-message').textContent = message;
-                modal.style.display = 'flex';
-            },
-            
-            // Show confirmation modal
-            showConfirm: function(title, message, onConfirm) {
-                const modal = document.getElementById('confirmModal');
-                document.getElementById('confirm-title').textContent = title;
-                document.getElementById('confirm-message').textContent = message;
-                
-                // Set up confirm button
-                const confirmBtn = document.getElementById('confirm-yes-btn');
-                
-                // Remove any existing event listeners
-                const newConfirmBtn = confirmBtn.cloneNode(true);
-                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-                
-                // Add new event listener
-                newConfirmBtn.addEventListener('click', () => {
-                    modal.style.display = 'none';
-                    onConfirm();
-                });
-                
-                modal.style.display = 'flex';
-            },
-            
-            // Helper function to get user name
-            getUserName: function(userId) {
-                const user = this.data.users.find(u => u.id === userId);
-                return user ? user.name : 'Unknown';
-            },
-            
-            // Format status for display
-            formatStatus: function(status) {
-                switch (status) {
-                    case 'open':
-                        return 'Open';
-                    case 'in_progress':
-                        return 'In Progress';
-                    case 'resolved':
-                        return 'Resolved';
-                    case 'closed':
-                        return 'Closed';
-                    default:
-                        return status;
-                }
-            },
-            
-            // Format priority for display
-            formatPriority: function(priority) {
-                switch (priority) {
-                    case 'low':
-                        return 'Low';
-                    case 'medium':
-                        return 'Medium';
-                    case 'high':
-                        return 'High';
-                    default:
-                        return priority;
-                }
-            },
-            
-            // Format device type for display
-            formatDeviceType: function(type) {
-                switch (type) {
-                    case 'computer':
-                        return 'Computer';
-                    case 'mobile':
-                        return 'Mobile Device';
-                    case 'printer':
-                        return 'Printer/Scanner';
-                    case 'network':
-                        return 'Network Equipment';
-                    case 'audiovisual':
-                        return 'Audio/Visual';
-                    case 'other':
-                        return 'Other';
-                    default:
-                        return type;
-                }
-            },
-            
-            // Format device status for display
-            formatDeviceStatus: function(status) {
-                switch (status) {
-                    case 'active':
-                        return 'Active';
-                    case 'maintenance':
-                        return 'Maintenance';
-                    case 'retired':
-                        return 'Retired';
-                    default:
-                        return status;
-                }
-            },
-            
-            // Format maintenance type for display
-            formatMaintenanceType: function(type) {
-                switch (type) {
-                    case 'cleaning':
-                        return 'Cleaning';
-                    case 'software_update':
-                        return 'Software Update';
-                    case 'hardware_repair':
-                        return 'Hardware Repair';
-                    case 'hardware_upgrade':
-                        return 'Hardware Upgrade';
-                    case 'inspection':
-                        return 'Inspection';
-                    case 'other':
-                        return 'Other';
-                    default:
-                        return type;
-                }
-            },
-            
-            // Format category for display
-            formatCategory: function(category) {
-                switch (category) {
-                    case 'hardware':
-                        return 'Hardware';
-                    case 'software':
-                        return 'Software';
-                    case 'network':
-                        return 'Network';
-                    case 'email':
-                        return 'Email';
-                    case 'printers':
-                        return 'Printers';
-                    case 'mobile':
-                        return 'Mobile Devices';
-                    case 'other':
-                        return 'Other';
-                    default:
-                        return category;
-                }
-            },
-            
-            // Format date for display
-            formatDate: function(date) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                const yesterday = new Date(today);
-                yesterday.setDate(yesterday.getDate() - 1);
-                
-                // Date is today
-                if (date.setHours(0, 0, 0, 0) === today.getTime()) {
-                    return 'Today';
-                }
-                
-                // Date is yesterday
-                if (date.setHours(0, 0, 0, 0) === yesterday.getTime()) {
-                    return 'Yesterday';
-                }
-                
-                // Date is within the last 7 days
-                const oneWeekAgo = new Date(today);
-                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                
-                if (date >= oneWeekAgo) {
-                    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                    return days[date.getDay()];
-                }
-                
-                // Format as MM/DD/YYYY
-                return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-            },
-            
-            // Format date and time for display
-            formatDateTime: function(date) {
-                // Format date
-                const formattedDate = this.formatDate(date);
-                
-                // Format time
-                let hours = date.getHours();
-                const minutes = date.getMinutes();
-                const ampm = hours >= 12 ? 'PM' : 'AM';
-                
-                hours = hours % 12;
-                hours = hours ? hours : 12; // the hour '0' should be '12'
-                
-                const formattedTime = hours + ':' + (minutes < 10 ? '0' + minutes : minutes) + ' ' + ampm;
-                
-                return formattedDate + ', ' + formattedTime;
-            }
-        };
-        
-        // Initialize the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', function() {
-            SimpleTicket.init();
-        });
-    </script>
-</body>
-</html>
- page
-            renderKnowledgePage: function() {
-                this.renderAllArticles();
-            },
-            
-            // Render all knowledge base articles
-            renderAllArticles: function() {
-                const tbody = document.getElementById('all-articles-body');
-                tbody.innerHTML = '';
-                
-                // Filter articles based on search term
-                let filteredArticles = this.data.knowledgeBase;
-                if (this.search.knowledge) {
-                    const searchTerm = this.search.knowledge.toLowerCase();
-                    filteredArticles = filteredArticles.filter(article => {
-                        return article.title.toLowerCase().includes(searchTerm) ||
-                               article.content.toLowerCase().includes(searchTerm) ||
-                               article.category.toLowerCase().includes(searchTerm);
-                    });
-                }
-                
-                // Sort articles by created date (newest first)
-                filteredArticles.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                
-                // Calculate pagination
-                const totalItems = filteredArticles.length;
-                this.pagination.knowledge.totalPages = Math.ceil(totalItems / this.pagination.knowledge.itemsPerPage);
-                
-                if (this.pagination.knowledge.currentPage > this.pagination.knowledge.totalPages) {
-                    this.pagination.knowledge.currentPage = 1;
-                }
-                
-                // Get articles for current page
-                const startIdx = (this.pagination.knowledge.currentPage - 1) * this.pagination.knowledge.itemsPerPage;
-                const endIdx = startIdx + this.pagination.knowledge.itemsPerPage;
-                const pageArticles = filteredArticles.slice(startIdx, endIdx);
-                
-                // Render articles
-                pageArticles.forEach(article => {
-                    const row = document.createElement('tr');
-                    
-                    // Get author name
-                    const author = this.data.users.find(u => u.id === article.createdBy);
-                    const authorName = author ? author.name : 'Unknown';
-                    
-                    // Format date
-                    const createdDate = new Date(article.createdAt);
-                    const formattedDate = this.formatDate(createdDate);
-                    
-                    // Create row content
-                    row.innerHTML = `
-                        <td>#${article.id}</td>
-                        <td>${article.title}</td>
-                        <td>${this.formatCategory(article.category)}</td>
-                        <td>${authorName}</td>
-                        <td>${formattedDate}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm view-article" data-id="${article.id}">View</button>
-                            <button class="btn btn-danger btn-sm delete-article" data-id="${article.id}">Delete</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // If no articles, show message
-                if (pageArticles.length === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="6" style="text-align: center;">No articles found${this.search.knowledge ? ' matching search criteria' : ''}.</td>`;
-                    tbody.appendChild(row);
-                }
-                
-                // Add event listeners to buttons
-                document.querySelectorAll('.view-article').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const articleId = parseInt(e.target.getAttribute('data-id'));
-                        this.viewArticle(articleId);
-                    });
-                });
-                
-                document.querySelectorAll('.delete-article').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const articleId = parseInt(e.target.getAttribute('data-id'));
-                        this.confirmDeleteArticle(articleId);
-                    });
-                });
-                
-                // Render pagination
-                this.renderPagination('knowledge');
-            },
-            
-            // Render settings page
-            renderSettingsPage: function() {
-                // Populate settings form with current values
-                document.getElementById('company-name').value = this.data.settings.companyName;
-                document.getElementById('department-name').value = this.data.settings.departmentName;
-                document.getElementById('default-priority').value = this.data.settings.defaultPriority;
-            },
-            
-            // Render pagination controls
-            renderPagination: function(type) {
-                const paginationEl = document.getElementById(`${type}-pagination`);
-                paginationEl.innerHTML = '';
-                
-                const totalPages = this.pagination[type].totalPages;
-                const currentPage = this.pagination[type].currentPage;
-                
-                if (totalPages <= 1) {
-                    return;
-                }
-                
-                // Previous button
-                const prevLi = document.createElement('li');
-                const prevLink = document.createElement('a');
-                prevLink.innerHTML = '&laquo;';
-                prevLink.setAttribute('data-page', Math.max(1, currentPage - 1));
-                prevLi.appendChild(prevLink);
-                paginationEl.appendChild(prevLi);
-                
-                // Page numbers
-                let startPage = Math.max(1, currentPage - 2);
-                let endPage = Math.min(totalPages, startPage + 4);
-                
-                if (endPage - startPage < 4 && totalPages > 4) {
-                    startPage = Math.max(1, endPage - 4);
-                }
-                
-                for (let i = startPage; i <= endPage; i++) {
-                    const li = document.createElement('li');
-                    const link = document.createElement('a');
-                    link.textContent = i;
-                    link.setAttribute('data-page', i);
-                    
-                    if (i === currentPage) {
-                        link.classList.add('active');
-                    }
-                    
-                    li.appendChild(link);
-                    paginationEl.appendChild(li);
-                }
-                
-                // Next button
-                const nextLi = document.createElement('li');
-                const nextLink = document.createElement('a');
-                nextLink.innerHTML = '&raquo;';
-                nextLink.setAttribute('data-page', Math.min(totalPages, currentPage + 1));
-                nextLi.appendChild(nextLink);
-                paginationEl.appendChild(nextLi);
-                
-                // Add event listeners to pagination links
-                paginationEl.querySelectorAll('a').forEach(link => {
-                    link.addEventListener('click', () => {
-                        const page = parseInt(link.getAttribute('data-page'));
-                        this.pagination[type].currentPage = page;
-                        
-                        // Render appropriate content based on type
-                        switch (type) {
-                            case 'tickets':
-                                this.renderAllTickets();
-                                break;
-                            case 'devices':
-                                this.renderAllDevices();
-                                break;
-                            case 'maintenance':
-                                this.renderAllMaintenance();
-                                break;
-                            case 'knowledge':
-                                this.renderAllArticles();
-                                break;
-                        }
-                    });
-                });
-            },
-            
-            // Show new ticket modal
-            showNewTicketModal: function() {
-                const modal = document.getElementById('newTicketModal');
-                
-                // Reset form
-                document.getElementById('newTicketForm').reset();
-                
-                // Set default priority from settings
-                document.getElementById('priority').value = this.data.settings.defaultPriority;
-                
-                // Populate device dropdown
-                const deviceSelect = document.getElementById('device');
-                deviceSelect.innerHTML = '<option value="">None/Not applicable</option>';
-                
-                this.data.devices
-                    .filter(device => device.status === 'active')
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.id;
-                        option.textContent = device.name;
-                        deviceSelect.appendChild(option);
-                    });
-                
-                // Populate requester dropdown
-                const requesterSelect = document.getElementById('requester');
-                requesterSelect.innerHTML = '<option value="" disabled selected>Select requester</option>';
-                
-                this.data.users.sort((a, b) => a.name.localeCompare(b.name)).forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.id;
-                    option.textContent = user.name;
-                    requesterSelect.appendChild(option);
-                });
-                
-                // Populate assigned to dropdown
-                const assignedSelect = document.getElementById('assignedTo');
-                assignedSelect.innerHTML = '<option value="">Unassigned</option>';
-                
-                this.data.users
-                    .filter(user => user.role === 'admin' || user.role === 'technician')
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user.id;
-                        option.textContent = user.name;
-                        assignedSelect.appendChild(option);
-                    });
-                
-                // Set min date for due date to today
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById('dueDate').min = today;
-                
-                // Show modal
-                modal.style.display = 'flex';
-            },
-            
-            // Submit new ticket
-            submitNewTicket: function() {
-                const subject = document.getElementById('subject').value.trim();
-                const description = document.getElementById('description').value.trim();
-                const deviceType = document.getElementById('deviceType').value;
-                const deviceId = document.getElementById('device').value ? parseInt(document.getElementById('device').value) : null;
-                const requesterId = parseInt(document.getElementById('requester').value);
-                const assignedTo = document.getElementById('assignedTo').value ? parseInt(document.getElementById('assignedTo').value) : null;
-                const priority = document.getElementById('priority').value;
-                const status = document.getElementById('status').value;
-                const dueDate = document.getElementById('dueDate').value ? new Date(document.getElementById('dueDate').value + 'T23:59:59').toISOString() : null;
-                
-                // Create new ticket
-                const newTicket = {
-                    id: ++this.data.lastTicketId,
-                    subject,
-                    description,
-                    status,
-                    priority,
-                    requesterId,
-                    assignedTo,
-                    deviceId,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                    resolvedAt: null,
-                    dueDate
-                };
-                
-                // Add ticket to data
-                this.data.tickets.push(newTicket);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Hide modal
-                document.getElementById('newTicketModal').style.display = 'none';
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('tickets-page').classList.contains('active-tab')) {
-                    this.renderTicketsPage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Ticket created successfully!');
-            },
-            
-            // Show new device modal
-            showNewDeviceModal: function() {
-                const modal = document.getElementById('newDeviceModal');
-                
-                // Reset form
-                document.getElementById('newDeviceForm').reset();
-                
-                // Populate assigned to dropdown
-                const assignToSelect = document.getElementById('assignTo');
-                assignToSelect.innerHTML = '<option value="">Not Assigned</option>';
-                
-                this.data.users
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user.id;
-                        option.textContent = user.name;
-                        assignToSelect.appendChild(option);
-                    });
-                
-                // Show modal
-                modal.style.display = 'flex';
-            },
-            
-            // Submit new device
-            submitNewDevice: function() {
-                const name = document.getElementById('deviceName').value.trim();
-                const type = document.getElementById('deviceTypeSelect').value;
-                const manufacturer = document.getElementById('manufacturer').value.trim();
-                const model = document.getElementById('model').value.trim();
-                const serialNumber = document.getElementById('serialNumber').value.trim();
-                const purchaseDate = document.getElementById('purchaseDate').value;
-                const warrantyExpiry = document.getElementById('warrantyExpiry').value;
-                const status = document.getElementById('deviceStatus').value;
-                const assignedTo = document.getElementById('assignTo').value ? parseInt(document.getElementById('assignTo').value) : null;
-                const location = document.getElementById('location').value.trim();
-                const notes = document.getElementById('notes').value.trim();
-                
-                // Create new device
-                const newDevice = {
-                    id: ++this.data.lastDeviceId,
-                    name,
-                    type,
-                    manufacturer,
-                    model,
-                    serialNumber,
-                    purchaseDate,
-                    warrantyExpiry,
-                    status,
-                    assignedTo,
-                    location,
-                    notes
-                };
-                
-                // Add device to data
-                this.data.devices.push(newDevice);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Hide modal
-                document.getElementById('newDeviceModal').style.display = 'none';
-                
-                // Refresh data
-                if (document.getElementById('inventory-page').classList.contains('active-tab')) {
-                    this.renderInventoryPage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Device added successfully!');
-            },
-            
-            // Show new maintenance log modal
-            showNewMaintenanceModal: function(deviceId = null) {
-                const modal = document.getElementById('newMaintenanceModal');
-                
-                // Reset form
-                document.getElementById('newMaintenanceForm').reset();
-                
-                // Set today as default date
-                const today = new Date().toISOString().split('T')[0];
-                document.getElementById('maintenanceDate').value = today;
-                
-                // Populate device dropdown
-                const deviceSelect = document.getElementById('maintenanceDevice');
-                deviceSelect.innerHTML = '<option value="" disabled selected>Select device</option>';
-                
-                this.data.devices
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(device => {
-                        const option = document.createElement('option');
-                        option.value = device.id;
-                        option.textContent = device.name;
-                        
-                        // If deviceId is provided, select it
-                        if (deviceId && device.id === deviceId) {
-                            option.selected = true;
-                        }
-                        
-                        deviceSelect.appendChild(option);
-                    });
-                
-                // Populate technician dropdown
-                const technicianSelect = document.getElementById('maintenanceTechnician');
-                technicianSelect.innerHTML = '<option value="" disabled selected>Select technician</option>';
-                
-                this.data.users
-                    .filter(user => user.role === 'admin' || user.role === 'technician')
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user.id;
-                        option.textContent = user.name;
-                        
-                        // Select current user by default
-                        if (user.id === this.currentUser.id) {
-                            option.selected = true;
-                        }
-                        
-                        technicianSelect.appendChild(option);
-                    });
-                
-                // Show modal
-                modal.style.display = 'flex';
-            },
-            
-            // Submit new maintenance log
-            submitNewMaintenance: function() {
-                const deviceId = parseInt(document.getElementById('maintenanceDevice').value);
-                const maintenanceType = document.getElementById('maintenanceType').value;
-                const technicianId = parseInt(document.getElementById('maintenanceTechnician').value);
-                const description = document.getElementById('maintenanceDescription').value.trim();
-                const performedDate = document.getElementById('maintenanceDate').value;
-                const nextMaintenanceDate = document.getElementById('nextMaintenanceDate').value || null;
-                
-                // Create new maintenance log
-                const newLog = {
-                    id: ++this.data.lastMaintenanceId,
-                    deviceId,
-                    technicianId,
-                    maintenanceType,
-                    description,
-                    performedAt: new Date(performedDate).toISOString(),
-                    nextMaintenanceDate: nextMaintenanceDate ? new Date(nextMaintenanceDate).toISOString() : null
-                };
-                
-                // Add log to data
-                this.data.maintenanceLogs.push(newLog);
-                
-                // Update device status to active if it was in maintenance
-                const device = this.data.devices.find(d => d.id === deviceId);
-                if (device && device.status === 'maintenance') {
-                    device.status = 'active';
-                }
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Hide modal
-                document.getElementById('newMaintenanceModal').style.display = 'none';
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('maintenance-page').classList.contains('active-tab')) {
-                    this.renderMaintenancePage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Maintenance log added successfully!');
-            },
-            
-            // Show new knowledge base article modal
-            showNewArticleModal: function() {
-                const modal = document.getElementById('newArticleModal');
-                
-                // Reset form
-                document.getElementById('newArticleForm').reset();
-                
-                // Populate author dropdown
-                const authorSelect = document.getElementById('articleAuthor');
-                authorSelect.innerHTML = '<option value="" disabled selected>Select author</option>';
-                
-                this.data.users
-                    .filter(user => user.role === 'admin' || user.role === 'technician')
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user.id;
-                        option.textContent = user.name;
-                        
-                        // Select current user by default
-                        if (user.id === this.currentUser.id) {
-                            option.selected = true;
-                        }
-                        
-                        authorSelect.appendChild(option);
-                    });
-                
-                // Show modal
-                modal.style.display = 'flex';
-            },
-            
-            // Submit new knowledge base article
-            submitNewArticle: function() {
-                const title = document.getElementById('articleTitle').value.trim();
-                const category = document.getElementById('articleCategory').value;
-                const content = document.getElementById('articleContent').value.trim();
-                const createdBy = parseInt(document.getElementById('articleAuthor').value);
-                
-                // Create new article
-                const newArticle = {
-                    id: ++this.data.lastArticleId,
-                    title,
-                    content,
-                    category,
-                    createdBy,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                
-                // Add article to data
-                this.data.knowledgeBase.push(newArticle);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Hide modal
-                document.getElementById('newArticleModal').style.display = 'none';
-                
-                // Refresh data
-                if (document.getElementById('knowledge-page').classList.contains('active-tab')) {
-                    this.renderKnowledgePage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Knowledge base article added successfully!');
-            },
-            
-            // View ticket details
-            viewTicket: function(ticketId) {
-                const ticket = this.data.tickets.find(t => t.id === ticketId);
-                if (!ticket) {
-                    this.showAlert('Error', 'Ticket not found!');
-                    return;
-                }
-                
-                // Populate ticket details
-                document.getElementById('view-ticket-id').textContent = `#${ticket.id}`;
-                document.getElementById('view-ticket-subject').textContent = ticket.subject;
-                document.getElementById('view-ticket-description').textContent = ticket.description;
-                
-                // Status with appropriate class
-                const statusEl = document.getElementById('view-ticket-status');
-                statusEl.textContent = this.formatStatus(ticket.status);
-                statusEl.className = '';
-                statusEl.classList.add('status', `status-${ticket.status.replace('_', '-')}`);
-                
-                // Priority with appropriate class
-                const priorityEl = document.getElementById('view-ticket-priority');
-                priorityEl.textContent = this.formatPriority(ticket.priority);
-                priorityEl.className = '';
-                priorityEl.classList.add('priority', `priority-${ticket.priority}`);
-                
-                // Requester
-                const requester = this.data.users.find(u => u.id === ticket.requesterId);
-                document.getElementById('view-ticket-requester').textContent = requester ? requester.name : 'Unknown';
-                
-                // Assigned to
-                let assignedText = 'Unassigned';
-                if (ticket.assignedTo) {
-                    const assigned = this.data.users.find(u => u.id === ticket.assignedTo);
-                    if (assigned) assignedText = assigned.name;
-                }
-                document.getElementById('view-ticket-assigned').textContent = assignedText;
-                
-                // Device
-                let deviceText = 'N/A';
-                if (ticket.deviceId) {
-                    const device = this.data.devices.find(d => d.id === ticket.deviceId);
-                    if (device) deviceText = device.name;
-                }
-                document.getElementById('view-ticket-device').textContent = deviceText;
-                
-                // Dates
-                document.getElementById('view-ticket-created').textContent = this.formatDateTime(new Date(ticket.createdAt));
-                
-                const dueEl = document.getElementById('view-ticket-due');
-                if (ticket.dueDate) {
-                    const dueDate = new Date(ticket.dueDate);
-                    dueEl.textContent = this.formatDate(dueDate);
-                    
-                    // Check if overdue
-                    if (ticket.status !== 'resolved' && ticket.status !== 'closed' && dueDate < new Date()) {
-                        dueEl.classList.add('status-overdue');
-                    } else {
-                        dueEl.classList.remove('status-overdue');
-                    }
-                } else {
-                    dueEl.textContent = 'No due date';
-                    dueEl.classList.remove('status-overdue');
-                }
-                
-                // Load comments
-                this.loadTicketComments(ticketId);
-                
-                // Show/hide "Mark as Resolved" button based on status
-                const resolveBtn = document.getElementById('resolve-ticket-btn');
-                if (ticket.status === 'resolved' || ticket.status === 'closed') {
-                    resolveBtn.style.display = 'none';
-                } else {
-                    resolveBtn.style.display = 'inline-block';
-                    resolveBtn.onclick = () => this.resolveTicket(ticketId);
-                }
-                
-                // Set up edit button
-                document.getElementById('edit-ticket-btn').onclick = () => this.editTicket(ticketId);
-                
-                // Show modal
-                document.getElementById('viewTicketModal').style.display = 'flex';
-            },
-            
-            // Load ticket comments
-            loadTicketComments: function(ticketId) {
-                const commentsContainer = document.getElementById('ticket-comments');
-                commentsContainer.innerHTML = '';
-                
-                // Get comments for this ticket
-                const comments = this.data.ticketComments
-                    .filter(c => c.ticketId === ticketId)
-                    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                
-                if (comments.length === 0) {
-                    commentsContainer.innerHTML = '<p>No comments yet.</p>';
-                    return;
-                }
-                
-                // Render comments
-                comments.forEach(comment => {
-                    const commentDiv = document.createElement('div');
-                    commentDiv.classList.add('comment');
-                    
-                    const user = this.data.users.find(u => u.id === comment.userId);
-                    const userName = user ? user.name : 'Unknown User';
-                    
-                    const createdDate = new Date(comment.createdAt);
-                    const formattedDate = this.formatDateTime(createdDate);
-                    
-                    commentDiv.innerHTML = `
-                        <div class="comment-header">
-                            <span class="comment-author">${userName}</span>
-                            <span class="comment-time">${formattedDate}</span>
-                        </div>
-                        <p class="comment-body">${comment.comment}</p>
-                    `;
-                    
-                    commentsContainer.appendChild(commentDiv);
-                });
-                
-                // Set up add comment functionality
-                document.getElementById('add-comment-btn').onclick = () => this.addComment(ticketId);
-            },
-            
-            // Add comment to ticket
-            addComment: function(ticketId) {
-                const commentText = document.getElementById('new-comment').value.trim();
-                if (!commentText) {
-                    this.showAlert('Error', 'Comment cannot be empty!');
-                    return;
-                }
-                
-                // Create new comment
-                const newComment = {
-                    id: ++this.data.lastCommentId,
-                    ticketId,
-                    userId: this.currentUser.id,
-                    comment: commentText,
-                    createdAt: new Date().toISOString()
-                };
-                
-                // Add comment to data
-                this.data.ticketComments.push(newComment);
-                
-                // Update ticket updatedAt
-                const ticket = this.data.tickets.find(t => t.id === ticketId);
-                if (ticket) {
-                    ticket.updatedAt = new Date().toISOString();
-                }
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Clear comment input
-                document.getElementById('new-comment').value = '';
-                
-                // Reload comments
-                this.loadTicketComments(ticketId);
-            },
-            
-            // Resolve ticket
-            resolveTicket: function(ticketId) {
-                const ticket = this.data.tickets.find(t => t.id === ticketId);
-                if (!ticket) return;
-                
-                ticket.status = 'resolved';
-                ticket.resolvedAt = new Date().toISOString();
-                ticket.updatedAt = new Date().toISOString();
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Hide modal
-                document.getElementById('viewTicketModal').style.display = 'none';
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('tickets-page').classList.contains('active-tab')) {
-                    this.renderTicketsPage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Ticket marked as resolved!');
-            },
-            
-            // Edit ticket (placeholder for future implementation)
-            editTicket: function(ticketId) {
-                this.showAlert('Information', 'Ticket editing will be implemented in a future update.');
-            },
-            
-            // View device details (placeholder for future implementation)
-            viewDevice: function(deviceId) {
-                this.showAlert('Information', 'Device details view will be implemented in a future update.');
-            },
-            
-            // View maintenance log details (placeholder for future implementation)
-            viewMaintenance: function(logId) {
-                this.showAlert('Information', 'Maintenance log details view will be implemented in a future update.');
-            },
-            
-            // View knowledge base article
-            viewArticle: function(articleId) {
-                const article = this.data.knowledgeBase.find(a => a.id === articleId);
-                if (!article) {
-                    this.showAlert('Error', 'Article not found!');
-                    return;
-                }
-                
-                // Populate article details
-                document.getElementById('view-article-title').textContent = article.title;
-                document.getElementById('view-article-category').textContent = this.formatCategory(article.category);
-                
-                // Author
-                const author = this.data.users.find(u => u.id === article.createdBy);
-                document.getElementById('view-article-author').textContent = author ? author.name : 'Unknown';
-                
-                // Date
-                const createdDate = new Date(article.createdAt);
-                document.getElementById('view-article-date').textContent = this.formatDateTime(createdDate);
-                
-                // Content
-                document.getElementById('view-article-content').textContent = article.content;
-                
-                // Set up edit button
-                document.getElementById('edit-article-btn').onclick = () => this.editArticle(articleId);
-                
-                // Show modal
-                document.getElementById('viewArticleModal').style.display = 'flex';
-            },
-            
-            // Edit article (placeholder for future implementation)
-            editArticle: function(articleId) {
-                this.showAlert('Information', 'Article editing will be implemented in a future update.');
-            },
-            
-            // Confirm delete ticket
-            confirmDeleteTicket: function(ticketId) {
-                this.showConfirm('Delete Ticket', 'Are you sure you want to delete this ticket? This action cannot be undone.', () => {
-                    this.deleteTicket(ticketId);
-                });
-            },
-            
-            // Delete ticket
-            deleteTicket: function(ticketId) {
-                // Remove ticket
-                this.data.tickets = this.data.tickets.filter(t => t.id !== ticketId);
-                
-                // Remove associated comments
-                this.data.ticketComments = this.data.ticketComments.filter(c => c.ticketId !== ticketId);
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-                
-                // Refresh data
-                this.renderDashboard();
-                if (document.getElementById('tickets-page').classList.contains('active-tab')) {
-                    this.renderTicketsPage();
-                }
-                
-                // Show success message
-                this.showAlert('Success', 'Ticket deleted successfully!');
-            },
-            
-            // Confirm delete device
-            confirmDeleteDevice: function(deviceId) {
-                // Check if device is associated with any tickets
-                const hasTickets = this.data.tickets.some(t => t.deviceId === deviceId);
-                
-                // Check if device has maintenance logs
-                const hasLogs = this.data.maintenanceLogs.some(l => l.deviceId === deviceId);
-                
-                let message = 'Are you sure you want to delete this device? This action cannot be undone.';
-                
-                if (hasTickets || hasLogs) {
-                    message += ' This device is associated with ' + 
-                               (hasTickets ? 'tickets' : '') + 
-                               (hasTickets && hasLogs ? ' and ' : '') + 
-                               (hasLogs ? 'maintenance logs' : '') + 
-                               '. Those associations will be removed.';
-                }
-                
-                this.showConfirm('Delete Device', message, () => {
-                    this.deleteDevice(deviceId);
-                });
-            },
-            
-            // Delete device
-            deleteDevice: function(deviceId) {
-                // Remove device
-                this.data.devices = this.data.devices.filter(d => d.icode solutions', category: 'printers', createdBy: 2, createdAt: threeMonthsAgo.toISOString(), updatedAt: threeMonthsAgo.toISOString() }
-                    ];
-                    this.data.lastArticleId = 3;
-                }
-                
-                // Save to local storage
-                this.saveToLocalStorage();
-            },
-            
-            // Load data from local storage
-            loadFromLocalStorage: function() {
-                try {
-                    const savedData = localStorage.getItem('simpleTicketData');
-                    if (savedData) {
-                        this.data = JSON.parse(savedData);
-                    }
-                } catch (e) {
-                    console.error('Error loading data from local storage:', e);
-                }
-            },
-            
-            // Save data to local storage
-            saveToLocalStorage: function() {
-                try {
-                    localStorage.setItem('simpleTicketData', JSON.stringify(this.data));
-                } catch (e) {
-                    console.error('Error saving data to local storage:', e);
-                    this.showAlert('Warning', 'Failed to save data to local storage. Your changes may not persist if you close the browser.');
-                }
-            },
-            
-            // Bind event listeners
-            bindEvents: function() {
-                // New ticket button
-                document.getElementById('newTicketBtn').addEventListener('click', () => this.showNewTicketModal());
-                document.getElementById('newTicketBtnPage').addEventListener('click', () => this.showNewTicketModal());
-                
-                // New device button
-                document.getElementById('newDeviceBtn').addEventListener('click', () => this.showNewDeviceModal());
-                
-                // New maintenance log button
-                document.getElementById('newMaintenanceBtn').addEventListener('click', () => this.showNewMaintenanceModal());
-                
-                // New article button
-                document.getElementById('newArticleBtn').addEventListener('click', () => this.showNewArticleModal());
-                
-                // Close modal buttons
-                document.querySelectorAll('.close, .close-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        document.querySelectorAll('.modal').forEach(modal => {
-                            modal.style.display = 'none';
-                        });
-                    });
-                });
-                
-                // Close modal when clicking outside
-                window.addEventListener('click', (event) => {
-                    document.querySelectorAll('.modal').forEach(modal => {
-                        if (event.target === modal) {
-                            modal.style.display = 'none';
-                        }
-                    });
-                });
-                
-                // Submit new ticket form
-                document.getElementById('newTicketForm').addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.submitNewTicket();
-                });
-                
-                // Submit new device form
-                document.getElementById('newDeviceForm').addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.submitNewDevice();
-                });
-                
-                // Submit new maintenance log form
-                document.getElementById('newMaintenanceForm').addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.submitNewMaintenance();
-                });
-                
-                // Submit new article form
-                document.getElementById('newArticleForm').addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.submitNewArticle();
-                });
-                
-                // Add comment button
-                document.getElementById('add-comment-btn').addEventListener('click', () => this.addComment());
-                
-                // Search buttons
-                document.getElementById('searchTicketsBtn').addEventListener('click', () => this.searchTickets());
-                document.getElementById('resetTicketsBtn').addEventListener('click', () => this.resetTicketsSearch());
-                
-                document.getElementById('searchDevicesBtn').addEventListener('click', () => this.searchDevices());
-                document.getElementById('resetDevicesBtn').addEventListener('click', () => this.resetDevicesSearch());
-                
-                document.getElementById('searchMaintenanceBtn').addEventListener('click', () => this.searchMaintenance());
-                document.getElementById('resetMaintenanceBtn').addEventListener('click', () => this.resetMaintenanceSearch());
-                
-                document.getElementById('searchKnowledgeBtn').addEventListener('click', () => this.searchKnowledge());
-                document.getElementById('resetKnowledgeBtn').addEventListener('click', () => this.resetKnowledgeSearch());
-                
-                // Export buttons
-                document.getElementById('exportTicketsCSVBtn').addEventListener('click', () => this.exportTicketsToCSV());
-                document.getElementById('exportDevicesCSVBtn').addEventListener('click', () => this.exportDevicesToCSV());
-                document.getElementById('exportDataBtn').addEventListener('click', () => this.exportAllData());
-                
-                // Import button
-                document.getElementById('importDataBtn').addEventListener('click', () => document.getElementById('importFile').click());
-                document.getElementById('importFile').addEventListener('change', (e) => this.importData(e));
-                
-                // Save settings button
-                document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
-            },
-            
-            // Setup navigation
-            setupNavigation: function() {
-                const navLinks = document.querySelectorAll('.nav-link');
-                const pages = document.querySelectorAll('.page-content');
-                
-                navLinks.forEach(link => {
-                    link.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        
-                        // Remove active class from all links
-                        navLinks.forEach(link => link.classList.remove('active'));
-                        
-                        // Add active class to clicked link
-                        e.target.classList.add('active');
-                        
-                        // Hide all pages
-                        pages.forEach(page => page.classList.remove('active-tab'));
-                        
-                        // Show selected page
-                        const pageId = e.target.getAttribute('data-page');
-                        document.getElementById(`${pageId}-page`).classList.add('active-tab');
-                        
-                        // Load page content
-                        this.loadPageContent(pageId);
-                    });
-                });
-            },
-            
-            // Load page content
-            loadPageContent: function(pageId) {
-                switch (pageId) {
-                    case 'dashboard':
-                        this.renderDashboard();
-                        break;
-                    case 'tickets':
-                        this.renderTicketsPage();
-                        break;
-                    case 'inventory':
-                        this.renderInventoryPage();
-                        break;
-                    case 'maintenance':
-                        this.renderMaintenancePage();
-                        break;
-                    case 'knowledge':
-                        this.renderKnowledgePage();
-                        break;
-                    case 'settings':
-                        this.renderSettingsPage();
-                        break;
-                }
-            },
-            
-            // Render dashboard
-            renderDashboard: function() {
-                this.updateDashboardCounts();
-                this.renderRecentTickets();
-                this.renderMaintenanceDue();
-            },
-            
-            // Update dashboard counts
-            updateDashboardCounts: function() {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
-                // Count tickets by status
-                const openCount = this.data.tickets.filter(ticket => ticket.status === 'open').length;
-                const progressCount = this.data.tickets.filter(ticket => ticket.status === 'in_progress').length;
-                
-                // Count resolved today
-                const resolvedToday = this.data.tickets.filter(ticket => {
-                    if (ticket.status !== 'resolved') return false;
-                    const resolvedDate = new Date(ticket.resolvedAt);
-                    resolvedDate.setHours(0, 0, 0, 0);
-                    return resolvedDate.getTime() === today.getTime();
-                }).length;
-                
-                // Count overdue tickets
-                const overdueCount = this.data.tickets.filter(ticket => {
-                    if (ticket.status === 'resolved' || ticket.status === 'closed') return false;
-                    if (!ticket.dueDate) return false;
-                    return new Date(ticket.dueDate) < new Date();
-                }).length;
-                
-                // Update count elements
-                document.getElementById('open-count').textContent = openCount;
-                document.getElementById('progress-count').textContent = progressCount;
-                document.getElementById('resolved-count').textContent = resolvedToday;
-                document.getElementById('overdue-count').textContent = overdueCount;
-            },
-            
-            // Render recent tickets table
-            renderRecentTickets: function() {
-                const tbody = document.getElementById('recent-tickets-body');
-                tbody.innerHTML = '';
-                
-                // Get 5 most recent tickets
-                const recentTickets = [...this.data.tickets]
-                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                    .slice(0, 5);
-                
-                recentTickets.forEach(ticket => {
-                    const row = document.createElement('tr');
-                    
-                    // Get device name if exists
-                    let deviceName = 'N/A';
-                    if (ticket.deviceId) {
-                        const device = this.data.devices.find(d => d.id === ticket.deviceId);
-                        if (device) deviceName = device.name;
-                    }
-                    
-                    // Get requester name
-                    const requester = this.data.users.find(u => u.id === ticket.requesterId);
-                    const requesterName = requester ? requester.name : 'Unknown';
-                    
-                    // Get assigned to name
-                    let assignedName = 'Unassigned';
-                    if (ticket.assignedTo) {
-                        const assigned = this.data.users.find(u => u.id === ticket.assignedTo);
-                        if (assigned) assignedName = assigned.name;
-                    }
-                    
-                    // Format created date
-                    const createdDate = new Date(ticket.createdAt);
-                    const formattedDate = this.formatDate(createdDate);
-                    
-                    // Determine status class
-                    let statusClass = '';
-                    switch (ticket.status) {
-                        case 'open':
-                            statusClass = 'status-open';
-                            break;
-                        case 'in_progress':
-                            statusClass = 'status-in-progress';
-                            break;
-                        case 'resolved':
-                            statusClass = 'status-resolved';
-                            break;
-                        case 'closed':
-                            statusClass = 'status-closed';
-                            break;
-                    }
-                    
-                    // Determine priority class
-                    let priorityClass = '';
-                    switch (ticket.priority) {
-                        case 'low':
-                            priorityClass = 'priority-low';
-                            break;
-                        case 'medium':
-                            priorityClass = 'priority-medium';
-                            break;
-                        case 'high':
-                            priorityClass = 'priority-high';
-                            break;
-                    }
-                    
-                    // Check if overdue
-                    const isOverdue = ticket.status !== 'resolved' && ticket.status !== 'closed' && 
-                                      ticket.dueDate && new Date(ticket.dueDate) < new Date();
-                    
-                    // Create row content
-                    row.innerHTML = `
-                        <td>#${ticket.id}</td>
-                        <td>${ticket.subject}</td>
-                        <td>${deviceName}</td>
-                        <td>${requesterName}</td>
-                        <td>${assignedName}</td>
-                        <td><span class="status ${statusClass}${isOverdue ? ' status-overdue' : ''}">${isOverdue ? 'Overdue' : this.formatStatus(ticket.status)}</span></td>
-                        <td><span class="priority ${priorityClass}">${this.formatPriority(ticket.priority)}</span></td>
-                        <td>${formattedDate}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm view-ticket" data-id="${ticket.id}">View</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // Add event listeners to view buttons
-                document.querySelectorAll('.view-ticket').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const ticketId = parseInt(e.target.getAttribute('data-id'));
-                        this.viewTicket(ticketId);
-                    });
-                });
-            },
-            
-            // Render maintenance due table
-            renderMaintenanceDue: function() {
-                const tbody = document.getElementById('maintenance-due-body');
-                tbody.innerHTML = '';
-                
-                // Get devices needing maintenance soon (next 30 days)
-                const today = new Date();
-                const thirtyDaysFromNow = new Date();
-                thirtyDaysFromNow.setDate(today.getDate() + 30);
-                
-                const maintenanceDue = this.data.maintenanceLogs
-                    .filter(log => {
-                        if (!log.nextMaintenanceDate) return false;
-                        const nextDate = new Date(log.nextMaintenanceDate);
-                        return nextDate >= today && nextDate <= thirtyDaysFromNow;
-                    })
-                    .sort((a, b) => new Date(a.nextMaintenanceDate) - new Date(b.nextMaintenanceDate));
-                
-                // Create a map to track devices already in the list
-                const deviceMap = new Map();
-                
-                // Display up to 5 devices needing maintenance
-                let count = 0;
-                maintenanceDue.forEach(log => {
-                    // Skip if we already have 5 devices or if device is already in the list
-                    if (count >= 5 || deviceMap.has(log.deviceId)) return;
-                    
-                    const device = this.data.devices.find(d => d.id === log.deviceId);
-                    if (!device) return;
-                    
-                    deviceMap.set(log.deviceId, true);
-                    count++;
-                    
-                    // Get last maintenance date
-                    const lastMaintenance = new Date(log.performedAt);
-                    const formattedLastDate = this.formatDate(lastMaintenance);
-                    
-                    // Get next maintenance date
-                    const nextMaintenance = new Date(log.nextMaintenanceDate);
-                    const formattedNextDate = this.formatDate(nextMaintenance);
-                    
-                    // Create row
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${device.name}</td>
-                        <td>${this.formatDeviceType(device.type)}</td>
-                        <td>${device.location || 'N/A'}</td>
-                        <td>${formattedLastDate}</td>
-                        <td>${formattedNextDate}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm schedule-maintenance" data-id="${device.id}">Schedule</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // If no maintenance due, show message
-                if (count === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = '<td colspan="6" class="text-center">No devices due for maintenance in the next 30 days.</td>';
-                    tbody.appendChild(row);
-                }
-                
-                // Add event listeners to schedule buttons
-                document.querySelectorAll('.schedule-maintenance').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const deviceId = parseInt(e.target.getAttribute('data-id'));
-                        this.showNewMaintenanceModal(deviceId);
-                    });
-                });
-            },
-            
-            // Render tickets page
-            renderTicketsPage: function() {
-                this.renderAllTickets();
-            },
-            
-            // Render all tickets
-            renderAllTickets: function() {
-                const tbody = document.getElementById('all-tickets-body');
-                tbody.innerHTML = '';
-                
-                // Filter tickets based on search term
-                let filteredTickets = this.data.tickets;
-                if (this.search.tickets) {
-                    const searchTerm = this.search.tickets.toLowerCase();
-                    filteredTickets = filteredTickets.filter(ticket => {
-                        return ticket.subject.toLowerCase().includes(searchTerm) ||
-                               ticket.description.toLowerCase().includes(searchTerm) ||
-                               this.getUserName(ticket.requesterId).toLowerCase().includes(searchTerm);
-                    });
-                }
-                
-                // Sort tickets by created date (newest first)
-                filteredTickets.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                
-                // Calculate pagination
-                const totalItems = filteredTickets.length;
-                this.pagination.tickets.totalPages = Math.ceil(totalItems / this.pagination.tickets.itemsPerPage);
-                
-                if (this.pagination.tickets.currentPage > this.pagination.tickets.totalPages) {
-                    this.pagination.tickets.currentPage = 1;
-                }
-                
-                // Get tickets for current page
-                const startIdx = (this.pagination.tickets.currentPage - 1) * this.pagination.tickets.itemsPerPage;
-                const endIdx = startIdx + this.pagination.tickets.itemsPerPage;
-                const pageTickets = filteredTickets.slice(startIdx, endIdx);
-                
-                // Render tickets
-                pageTickets.forEach(ticket => {
-                    const row = document.createElement('tr');
-                    
-                    // Get device name if exists
-                    let deviceName = 'N/A';
-                    if (ticket.deviceId) {
-                        const device = this.data.devices.find(d => d.id === ticket.deviceId);
-                        if (device) deviceName = device.name;
-                    }
-                    
-                    // Get requester name
-                    const requesterName = this.getUserName(ticket.requesterId);
-                    
-                    // Get assigned to name
-                    let assignedName = 'Unassigned';
-                    if (ticket.assignedTo) {
-                        const assigned = this.data.users.find(u => u.id === ticket.assignedTo);
-                        if (assigned) assignedName = assigned.name;
-                    }
-                    
-                    // Format created date
-                    const createdDate = new Date(ticket.createdAt);
-                    const formattedDate = this.formatDate(createdDate);
-                    
-                    // Determine status class
-                    let statusClass = '';
-                    switch (ticket.status) {
-                        case 'open':
-                            statusClass = 'status-open';
-                            break;
-                        case 'in_progress':
-                            statusClass = 'status-in-progress';
-                            break;
-                        case 'resolved':
-                            statusClass = 'status-resolved';
-                            break;
-                        case 'closed':
-                            statusClass = 'status-closed';
-                            break;
-                    }
-                    
-                    // Determine priority class
-                    let priorityClass = '';
-                    switch (ticket.priority) {
-                        case 'low':
-                            priorityClass = 'priority-low';
-                            break;
-                        case 'medium':
-                            priorityClass = 'priority-medium';
-                            break;
-                        case 'high':
-                            priorityClass = 'priority-high';
-                            break;
-                    }
-                    
-                    // Check if overdue
-                    const isOverdue = ticket.status !== 'resolved' && ticket.status !== 'closed' && 
-                                      ticket.dueDate && new Date(ticket.dueDate) < new Date();
-                    
-                    // Create row content
-                    row.innerHTML = `
-                        <td>#${ticket.id}</td>
-                        <td>${ticket.subject}</td>
-                        <td>${deviceName}</td>
-                        <td>${requesterName}</td>
-                        <td>${assignedName}</td>
-                        <td><span class="status ${statusClass}${isOverdue ? ' status-overdue' : ''}">${isOverdue ? 'Overdue' : this.formatStatus(ticket.status)}</span></td>
-                        <td><span class="priority ${priorityClass}">${this.formatPriority(ticket.priority)}</span></td>
-                        <td>${formattedDate}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm view-ticket" data-id="${ticket.id}">View</button>
-                            <button class="btn btn-danger btn-sm delete-ticket" data-id="${ticket.id}">Delete</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // If no tickets, show message
-                if (pageTickets.length === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="9" style="text-align: center;">No tickets found${this.search.tickets ? ' matching search criteria' : ''}.</td>`;
-                    tbody.appendChild(row);
-                }
-                
-                // Add event listeners to buttons
-                document.querySelectorAll('.view-ticket').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const ticketId = parseInt(e.target.getAttribute('data-id'));
-                        this.viewTicket(ticketId);
-                    });
-                });
-                
-                document.querySelectorAll('.delete-ticket').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const ticketId = parseInt(e.target.getAttribute('data-id'));
-                        this.confirmDeleteTicket(ticketId);
-                    });
-                });
-                
-                // Render pagination
-                this.renderPagination('tickets');
-            },
-            
-            // Render inventory page
-            renderInventoryPage: function() {
-                this.renderAllDevices();
-            },
-            
-            // Render all devices
-            renderAllDevices: function() {
-                const tbody = document.getElementById('all-devices-body');
-                tbody.innerHTML = '';
-                
-                // Filter devices based on search term
-                let filteredDevices = this.data.devices;
-                if (this.search.devices) {
-                    const searchTerm = this.search.devices.toLowerCase();
-                    filteredDevices = filteredDevices.filter(device => {
-                        return device.name.toLowerCase().includes(searchTerm) ||
-                               device.type.toLowerCase().includes(searchTerm) ||
-                               (device.model && device.model.toLowerCase().includes(searchTerm)) ||
-                               (device.serialNumber && device.serialNumber.toLowerCase().includes(searchTerm)) ||
-                               (device.location && device.location.toLowerCase().includes(searchTerm));
-                    });
-                }
-                
-                // Sort devices by name
-                filteredDevices.sort((a, b) => a.name.localeCompare(b.name));
-                
-                // Calculate pagination
-                const totalItems = filteredDevices.length;
-                this.pagination.devices.totalPages = Math.ceil(totalItems / this.pagination.devices.itemsPerPage);
-                
-                if (this.pagination.devices.currentPage > this.pagination.devices.totalPages) {
-                    this.pagination.devices.currentPage = 1;
-                }
-                
-                // Get devices for current page
-                const startIdx = (this.pagination.devices.currentPage - 1) * this.pagination.devices.itemsPerPage;
-                const endIdx = startIdx + this.pagination.devices.itemsPerPage;
-                const pageDevices = filteredDevices.slice(startIdx, endIdx);
-                
-                // Render devices
-                pageDevices.forEach(device => {
-                    const row = document.createElement('tr');
-                    
-                    // Get assigned to name
-                    let assignedName = 'Not Assigned';
-                    if (device.assignedTo) {
-                        const assigned = this.data.users.find(u => u.id === device.assignedTo);
-                        if (assigned) assignedName = assigned.name;
-                    }
-                    
-                    // Determine status class
-                    let statusClass = '';
-                    switch (device.status) {
-                        case 'active':
-                            statusClass = 'device-status-active';
-                            break;
-                        case 'maintenance':
-                            statusClass = 'device-status-maintenance';
-                            break;
-                        case 'retired':
-                            statusClass = 'device-status-retired';
-                            break;
-                    }
-                    
-                    // Create row content
-                    row.innerHTML = `
-                        <td>#${device.id}</td>
-                        <td>${device.name}</td>
-                        <td>${this.formatDeviceType(device.type)}</td>
-                        <td>${device.model || 'N/A'}</td>
-                        <td>${device.serialNumber || 'N/A'}</td>
-                        <td><span class="device-status ${statusClass}">${this.formatDeviceStatus(device.status)}</span></td>
-                        <td>${device.location || 'N/A'}</td>
-                        <td>${assignedName}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm view-device" data-id="${device.id}">View</button>
-                            <button class="btn btn-warning btn-sm maintenance-device" data-id="${device.id}">Add Maintenance</button>
-                            <button class="btn btn-danger btn-sm delete-device" data-id="${device.id}">Delete</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // If no devices, show message
-                if (pageDevices.length === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="9" style="text-align: center;">No devices found${this.search.devices ? ' matching search criteria' : ''}.</td>`;
-                    tbody.appendChild(row);
-                }
-                
-                // Add event listeners to buttons
-                document.querySelectorAll('.view-device').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const deviceId = parseInt(e.target.getAttribute('data-id'));
-                        this.viewDevice(deviceId);
-                    });
-                });
-                
-                document.querySelectorAll('.maintenance-device').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const deviceId = parseInt(e.target.getAttribute('data-id'));
-                        this.showNewMaintenanceModal(deviceId);
-                    });
-                });
-                
-                document.querySelectorAll('.delete-device').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const deviceId = parseInt(e.target.getAttribute('data-id'));
-                        this.confirmDeleteDevice(deviceId);
-                    });
-                });
-                
-                // Render pagination
-                this.renderPagination('devices');
-            },
-            
-            // Render maintenance page
-            renderMaintenancePage: function() {
-                this.renderAllMaintenance();
-            },
-            
-            // Render all maintenance logs
-            renderAllMaintenance: function() {
-                const tbody = document.getElementById('all-maintenance-body');
-                tbody.innerHTML = '';
-                
-                // Filter logs based on search term
-                let filteredLogs = this.data.maintenanceLogs;
-                if (this.search.maintenance) {
-                    const searchTerm = this.search.maintenance.toLowerCase();
-                    filteredLogs = filteredLogs.filter(log => {
-                        const device = this.data.devices.find(d => d.id === log.deviceId);
-                        const deviceName = device ? device.name.toLowerCase() : '';
-                        
-                        return deviceName.includes(searchTerm) ||
-                               log.maintenanceType.toLowerCase().includes(searchTerm) ||
-                               log.description.toLowerCase().includes(searchTerm);
-                    });
-                }
-                
-                // Sort logs by performed date (newest first)
-                filteredLogs.sort((a, b) => new Date(b.performedAt) - new Date(a.performedAt));
-                
-                // Calculate pagination
-                const totalItems = filteredLogs.length;
-                this.pagination.maintenance.totalPages = Math.ceil(totalItems / this.pagination.maintenance.itemsPerPage);
-                
-                if (this.pagination.maintenance.currentPage > this.pagination.maintenance.totalPages) {
-                    this.pagination.maintenance.currentPage = 1;
-                }
-                
-                // Get logs for current page
-                const startIdx = (this.pagination.maintenance.currentPage - 1) * this.pagination.maintenance.itemsPerPage;
-                const endIdx = startIdx + this.pagination.maintenance.itemsPerPage;
-                const pageLogs = filteredLogs.slice(startIdx, endIdx);
-                
-                // Render logs
-                pageLogs.forEach(log => {
-                    const row = document.createElement('tr');
-                    
-                    // Get device name
-                    const device = this.data.devices.find(d => d.id === log.deviceId);
-                    const deviceName = device ? device.name : 'Unknown Device';
-                    
-                    // Get technician name
-                    const technician = this.data.users.find(u => u.id === log.technicianId);
-                    const technicianName = technician ? technician.name : 'Unknown';
-                    
-                    // Format dates
-                    const performedDate = new Date(log.performedAt);
-                    const formattedPerformedDate = this.formatDate(performedDate);
-                    
-                    let formattedNextDate = 'Not Scheduled';
-                    if (log.nextMaintenanceDate) {
-                        const nextDate = new Date(log.nextMaintenanceDate);
-                        formattedNextDate = this.formatDate(nextDate);
-                    }
-                    
-                    // Create row content
-                    row.innerHTML = `
-                        <td>#${log.id}</td>
-                        <td>${deviceName}</td>
-                        <td>${this.formatMaintenanceType(log.maintenanceType)}</td>
-                        <td>${technicianName}</td>
-                        <td>${log.description.substring(0, 50)}${log.description.length > 50 ? '...' : ''}</td>
-                        <td>${formattedPerformedDate}</td>
-                        <td>${formattedNextDate}</td>
-                        <td class="action-cell">
-                            <button class="btn btn-primary btn-sm view-maintenance" data-id="${log.id}">View</button>
-                            <button class="btn btn-danger btn-sm delete-maintenance" data-id="${log.id}">Delete</button>
-                        </td>
-                    `;
-                    
-                    tbody.appendChild(row);
-                });
-                
-                // If no logs, show message
-                if (pageLogs.length === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td colspan="8" style="text-align: center;">No maintenance logs found${this.search.maintenance ? ' matching search criteria' : ''}.</td>`;
-                    tbody.appendChild(row);
-                }
-                
-                // Add event listeners to buttons
-                document.querySelectorAll('.view-maintenance').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const logId = parseInt(e.target.getAttribute('data-id'));
-                        this.viewMaintenance(logId);
-                    });
-                });
-                
-                document.querySelectorAll('.delete-maintenance').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const logId = parseInt(e.target.getAttribute('data-id'));
-                        this.confirmDeleteMaintenance(logId);
-                    });
-                });
-                
-                // Render pagination
-                this.renderPagination('maintenance');
-            },
-            
-            // Render knowledge base<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SimpleTicket - IT Department Ticketing System</title>
+    <title>SimpleTicket - IT Ticketing System</title>
     <style>
-        :root {
-            --primary: #3498db;
-            --primary-dark: #2980b9;
-            --success: #2ecc71;
-            --warning: #f39c12;
-            --danger: #e74c3c;
-            --light: #f8f9fa;
-            --dark: #343a40;
-            --gray: #6c757d;
-            --shadow: rgba(0, 0, 0, 0.1);
-        }
-        
+        /* Reset */
         * {
             margin: 0;
             padding: 0;
@@ -2146,23 +14,29 @@ d !== deviceId);
         }
         
         body {
-            background-color: #f5f5f5;
+            background-color: #f0f2f5;
             color: #333;
             line-height: 1.6;
         }
         
+        /* Header */
         header {
-            background-color: var(--primary);
+            background-color: #2196F3;
             color: white;
             padding: 1rem 2rem;
-            box-shadow: 0 2px 5px var(--shadow);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
         .logo {
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             font-weight: bold;
         }
         
@@ -2184,18 +58,24 @@ d !== deviceId);
         }
         
         nav ul li a:hover {
-            background-color: var(--primary-dark);
+            background-color: rgba(255, 255, 255, 0.2);
         }
         
+        nav ul li a.active {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* Container */
         .container {
             max-width: 1200px;
             margin: 2rem auto;
             padding: 0 1rem;
         }
         
+        /* Dashboard */
         .dashboard {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
@@ -2203,18 +83,29 @@ d !== deviceId);
         .card {
             background-color: white;
             border-radius: 8px;
-            box-shadow: 0 2px 10px var(--shadow);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             padding: 1.5rem;
-            transition: transform 0.3s;
         }
         
-        .card:hover {
-            transform: translateY(-5px);
+        .card.open {
+            border-top: 4px solid #FF9800;
+        }
+        
+        .card.in-progress {
+            border-top: 4px solid #2196F3;
+        }
+        
+        .card.resolved {
+            border-top: 4px solid #4CAF50;
+        }
+        
+        .card.overdue {
+            border-top: 4px solid #F44336;
         }
         
         .card-title {
-            font-size: 1.2rem;
-            color: var(--dark);
+            font-size: 1.5rem;
+            color: #333;
             margin-bottom: 1rem;
             display: flex;
             align-items: center;
@@ -2222,47 +113,54 @@ d !== deviceId);
         }
         
         .card-title .count {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: bold;
         }
         
-        .card.open {
-            border-top: 4px solid var(--warning);
-        }
-        
-        .card.in-progress {
-            border-top: 4px solid var(--primary);
-        }
-        
-        .card.resolved {
-            border-top: 4px solid var(--success);
-        }
-        
-        .card.overdue {
-            border-top: 4px solid var(--danger);
-        }
-        
-        .ticket-list {
+        /* Tables */
+        .panel {
             background-color: white;
             border-radius: 8px;
-            box-shadow: 0 2px 10px var(--shadow);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            margin-bottom: 2rem;
         }
         
-        .list-header {
+        .panel-header {
             padding: 1rem;
-            background-color: var(--light);
+            background-color: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
-        .list-title {
+        .panel-title {
             font-size: 1.25rem;
             font-weight: 600;
         }
         
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        /* Buttons */
         .btn {
             padding: 0.5rem 1rem;
             border-radius: 4px;
@@ -2273,37 +171,28 @@ d !== deviceId);
         }
         
         .btn-primary {
-            background-color: var(--primary);
+            background-color: #2196F3;
             color: white;
         }
         
         .btn-primary:hover {
-            background-color: var(--primary-dark);
+            background-color: #0d8bf2;
         }
         
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        .btn-success {
+            background-color: #4CAF50;
+            color: white;
         }
         
-        th, td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid #dee2e6;
+        .btn-danger {
+            background-color: #F44336;
+            color: white;
         }
         
-        th {
-            background-color: var(--light);
-            font-weight: 600;
-        }
-        
-        tr:hover {
-            background-color: rgba(0, 0, 0, 0.02);
-        }
-        
+        /* Status badges */
         .status {
             padding: 0.25rem 0.75rem;
-            border-radius: 100px;
+            border-radius: 50px;
             font-size: 0.85rem;
             font-weight: 500;
             display: inline-block;
@@ -2324,14 +213,9 @@ d !== deviceId);
             color: #155724;
         }
         
-        .status-overdue {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
         .priority {
             padding: 0.25rem 0.75rem;
-            border-radius: 100px;
+            border-radius: 50px;
             font-size: 0.85rem;
             font-weight: 500;
             display: inline-block;
@@ -2352,386 +236,342 @@ d !== deviceId);
             color: #842029;
         }
         
-        .pagination {
-            display: flex;
-            justify-content: center;
-            list-style: none;
-            margin-top: 1rem;
-        }
-        
-        .pagination li {
-            margin: 0 0.25rem;
-        }
-        
-        .pagination a {
-            display: block;
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
-            text-decoration: none;
-            color: var(--primary);
-            background-color: white;
-            border: 1px solid #dee2e6;
-        }
-        
-        .pagination a.active {
-            background-color: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-        
-        .pagination a:hover:not(.active) {
-            background-color: var(--light);
-        }
-        
-        /* Modal Styles */
-        .modal {
+        /* Hidden pages */
+        .page-content:not(.active) {
             display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-content {
-            background-color: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-            width: 100%;
-            max-width: 600px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-        
-        .modal-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        
-        .close {
-            font-size: 1.5rem;
-            cursor: pointer;
-            border: none;
-            background: none;
-            color: var(--gray);
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 1rem;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25);
-        }
-        
-        select.form-control {
-            appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 0.5rem center;
-            background-size: 1em;
-        }
-        
-        textarea.form-control {
-            min-height: 100px;
-            resize: vertical;
-        }
-        
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        .btn-secondary {
-            background-color: var(--gray);
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background-color: #5a6268;
         }
     </style>
 </head>
 <body>
     <header>
-        <div class="logo">SimpleTicket</div>
-        <nav>
-            <ul>
-                <li><a href="#dashboard">Dashboard</a></li>
-                <li><a href="#tickets">Tickets</a></li>
-                <li><a href="#inventory">Inventory</a></li>
-                <li><a href="#reports">Reports</a></li>
-                <li><a href="#settings">Settings</a></li>
-            </ul>
-        </nav>
+        <div class="header-content">
+            <div class="logo">SimpleTicket</div>
+            <nav>
+                <ul>
+                    <li><a href="#dashboard" class="nav-link active" data-page="dashboard">Dashboard</a></li>
+                    <li><a href="#tickets" class="nav-link" data-page="tickets">Tickets</a></li>
+                    <li><a href="#inventory" class="nav-link" data-page="inventory">Inventory</a></li>
+                    <li><a href="#settings" class="nav-link" data-page="settings">Settings</a></li>
+                </ul>
+            </nav>
+        </div>
     </header>
     
     <div class="container">
-        <div class="dashboard">
-            <div class="card open">
-                <div class="card-title">
-                    <span>Open Tickets</span>
-                    <span class="count">12</span>
+        <!-- Dashboard Page -->
+        <div id="dashboard" class="page-content active">
+            <div class="dashboard">
+                <div class="card open">
+                    <div class="card-title">
+                        <span>Open Tickets</span>
+                        <span class="count">12</span>
+                    </div>
+                    <p>Awaiting assignment or initial response</p>
                 </div>
-                <p>Awaiting assignment or initial response</p>
+                <div class="card in-progress">
+                    <div class="card-title">
+                        <span>In Progress</span>
+                        <span class="count">8</span>
+                    </div>
+                    <p>Currently being worked on by technicians</p>
+                </div>
+                <div class="card resolved">
+                    <div class="card-title">
+                        <span>Resolved Today</span>
+                        <span class="count">7</span>
+                    </div>
+                    <p>Successfully resolved within the last 24 hours</p>
+                </div>
+                <div class="card overdue">
+                    <div class="card-title">
+                        <span>Overdue</span>
+                        <span class="count">3</span>
+                    </div>
+                    <p>Past the target resolution time</p>
+                </div>
             </div>
-            <div class="card in-progress">
-                <div class="card-title">
-                    <span>In Progress</span>
-                    <span class="count">8</span>
+            
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Recent Tickets</span>
+                    <button class="btn btn-primary">New Ticket</button>
                 </div>
-                <p>Currently being worked on by technicians</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Subject</th>
+                            <th>Device</th>
+                            <th>Requester</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#1089</td>
+                            <td>PC won't boot after Windows update</td>
+                            <td>Dell Latitude 5520</td>
+                            <td>Sarah Johnson</td>
+                            <td><span class="status status-in-progress">In Progress</span></td>
+                            <td><span class="priority priority-high">High</span></td>
+                            <td>Today</td>
+                            <td><button class="btn btn-primary">View</button></td>
+                        </tr>
+                        <tr>
+                            <td>#1088</td>
+                            <td>Request for new headset</td>
+                            <td>N/A</td>
+                            <td>Michael Chen</td>
+                            <td><span class="status status-open">Open</span></td>
+                            <td><span class="priority priority-low">Low</span></td>
+                            <td>Today</td>
+                            <td><button class="btn btn-primary">View</button></td>
+                        </tr>
+                        <tr>
+                            <td>#1087</td>
+                            <td>Email sync issues on iPhone</td>
+                            <td>iPhone 13 Pro</td>
+                            <td>Emily Rodriguez</td>
+                            <td><span class="status status-resolved">Resolved</span></td>
+                            <td><span class="priority priority-medium">Medium</span></td>
+                            <td>Yesterday</td>
+                            <td><button class="btn btn-primary">View</button></td>
+                        </tr>
+                        <tr>
+                            <td>#1086</td>
+                            <td>Conference room projector not working</td>
+                            <td>Epson EB-L520U</td>
+                            <td>David Wilson</td>
+                            <td><span class="status status-open">Open</span></td>
+                            <td><span class="priority priority-high">High</span></td>
+                            <td>Yesterday</td>
+                            <td><button class="btn btn-primary">View</button></td>
+                        </tr>
+                        <tr>
+                            <td>#1085</td>
+                            <td>Printer paper jam</td>
+                            <td>HP LaserJet Pro M404dn</td>
+                            <td>Alex Martinez</td>
+                            <td><span class="status status-resolved">Resolved</span></td>
+                            <td><span class="priority priority-medium">Medium</span></td>
+                            <td>May 16</td>
+                            <td><button class="btn btn-primary">View</button></td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            <div class="card resolved">
-                <div class="card-title">
-                    <span>Resolved Today</span>
-                    <span class="count">7</span>
+            
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">Devices Needing Maintenance</span>
                 </div>
-                <p>Successfully resolved within the last 24 hours</p>
-            </div>
-            <div class="card overdue">
-                <div class="card-title">
-                    <span>Overdue</span>
-                    <span class="count">3</span>
-                </div>
-                <p>Past the target resolution time</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Device Name</th>
+                            <th>Type</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>OFFICE-PRT-02</td>
+                            <td>Printer/Scanner</td>
+                            <td>Office Floor 2</td>
+                            <td>Maintenance</td>
+                            <td><button class="btn btn-success">Complete</button></td>
+                        </tr>
+                        <tr>
+                            <td>DEV-LT-05</td>
+                            <td>Computer</td>
+                            <td>Development Department</td>
+                            <td>Maintenance</td>
+                            <td><button class="btn btn-success">Complete</button></td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
         
-        <div class="ticket-list">
-            <div class="list-header">
-                <span class="list-title">Recent Tickets</span>
-                <button class="btn btn-primary" id="newTicketBtn">New Ticket</button>
+        <!-- Tickets Page -->
+        <div id="tickets" class="page-content">
+            <div class="panel-header" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+                <span class="panel-title">All Tickets</span>
+                <button class="btn btn-primary">New Ticket</button>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Subject</th>
-                        <th>Device</th>
-                        <th>Requester</th>
-                        <th>Assigned To</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                        <th>Created</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>#1089</td>
-                        <td>PC won't boot after Windows update</td>
-                        <td>Dell Latitude 5520</td>
-                        <td>Sarah Johnson</td>
-                        <td>Charles (Group Leader)</td>
-                        <td><span class="status status-in-progress">In Progress</span></td>
-                        <td><span class="priority priority-high">High</span></td>
-                        <td>Today, 09:45 AM</td>
-                    </tr>
-                    <tr>
-                        <td>#1088</td>
-                        <td>Request for new headset</td>
-                        <td>N/A</td>
-                        <td>Michael Chen</td>
-                        <td>Kio (Assistant)</td>
-                        <td><span class="status status-open">Open</span></td>
-                        <td><span class="priority priority-low">Low</span></td>
-                        <td>Today, 09:12 AM</td>
-                    </tr>
-                    <tr>
-                        <td>#1087</td>
-                        <td>Email sync issues on iPhone</td>
-                        <td>iPhone 13 Pro</td>
-                        <td>Emily Rodriguez</td>
-                        <td>Jovannie (Member)</td>
-                        <td><span class="status status-resolved">Resolved</span></td>
-                        <td><span class="priority priority-medium">Medium</span></td>
-                        <td>Yesterday, 4:30 PM</td>
-                    </tr>
-                    <tr>
-                        <td>#1086</td>
-                        <td>Conference room projector not working</td>
-                        <td>Epson EB-L520U</td>
-                        <td>David Wilson</td>
-                        <td>Jerald (Assistant)</td>
-                        <td><span class="status status-overdue">Overdue</span></td>
-                        <td><span class="priority priority-high">High</span></td>
-                        <td>Yesterday, 10:15 AM</td>
-                    </tr>
-                    <tr>
-                        <td>#1085</td>
-                        <td>Printer paper jam</td>
-                        <td>HP LaserJet Pro M404dn</td>
-                        <td>Alex Martinez</td>
-                        <td>Charles (Group Leader)</td>
-                        <td><span class="status status-resolved">Resolved</span></td>
-                        <td><span class="priority priority-medium">Medium</span></td>
-                        <td>May 16, 2:45 PM</td>
-                    </tr>
-                    <tr>
-                        <td>#1084</td>
-                        <td>VPN connection issues</td>
-                        <td>Macbook Pro M2</td>
-                        <td>Lisa Thompson</td>
-                        <td>Kio (Assistant)</td>
-                        <td><span class="status status-resolved">Resolved</span></td>
-                        <td><span class="priority priority-high">High</span></td>
-                        <td>May 16, 11:30 AM</td>
-                    </tr>
-                    <tr>
-                        <td>#1083</td>
-                        <td>Request for additional monitor</td>
-                        <td>N/A</td>
-                        <td>John Parker</td>
-                        <td>Jovannie (Member)</td>
-                        <td><span class="status status-in-progress">In Progress</span></td>
-                        <td><span class="priority priority-low">Low</span></td>
-                        <td>May 15, 3:20 PM</td>
-                    </tr>
-                </tbody>
-            </table>
-            <ul class="pagination">
-                <li><a href="#">&laquo;</a></li>
-                <li><a href="#" class="active">1</a></li>
-                <li><a href="#">2</a></li>
-                <li><a href="#">3</a></li>
-                <li><a href="#">&raquo;</a></li>
-            </ul>
+            
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Subject</th>
+                            <th>Device</th>
+                            <th>Requester</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#1089</td>
+                            <td>PC won't boot after Windows update</td>
+                            <td>Dell Latitude 5520</td>
+                            <td>Sarah Johnson</td>
+                            <td><span class="status status-in-progress">In Progress</span></td>
+                            <td><span class="priority priority-high">High</span></td>
+                            <td>Today</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#1088</td>
+                            <td>Request for new headset</td>
+                            <td>N/A</td>
+                            <td>Michael Chen</td>
+                            <td><span class="status status-open">Open</span></td>
+                            <td><span class="priority priority-low">Low</span></td>
+                            <td>Today</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#1087</td>
+                            <td>Email sync issues on iPhone</td>
+                            <td>iPhone 13 Pro</td>
+                            <td>Emily Rodriguez</td>
+                            <td><span class="status status-resolved">Resolved</span></td>
+                            <td><span class="priority priority-medium">Medium</span></td>
+                            <td>Yesterday</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
-    
-    <!-- New Ticket Modal -->
-    <div class="modal" id="newTicketModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Create New Ticket</h3>
-                <button class="close">&times;</button>
+        
+        <!-- Inventory Page -->
+        <div id="inventory" class="page-content">
+            <div class="panel-header" style="background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); margin-bottom: 1rem;">
+                <span class="panel-title">All Devices</span>
+                <button class="btn btn-primary">Add Device</button>
             </div>
-            <form id="newTicketForm">
-                <div class="form-group">
-                    <label for="subject">Subject</label>
-                    <input type="text" class="form-control" id="subject" placeholder="Brief description of the issue" required>
+            
+            <div class="panel">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Model</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#1</td>
+                            <td>Finance-PC-01</td>
+                            <td>Computer</td>
+                            <td>Dell OptiPlex 7080</td>
+                            <td>Finance Department</td>
+                            <td>Active</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#2</td>
+                            <td>Marketing-LT-03</td>
+                            <td>Computer</td>
+                            <td>Dell Latitude 5520</td>
+                            <td>Marketing Department</td>
+                            <td>Active</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#3</td>
+                            <td>OFFICE-PRT-02</td>
+                            <td>Printer/Scanner</td>
+                            <td>HP LaserJet Pro M404dn</td>
+                            <td>Office Floor 2</td>
+                            <td>Maintenance</td>
+                            <td>
+                                <button class="btn btn-primary">View</button>
+                                <button class="btn btn-danger">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Settings Page -->
+        <div id="settings" class="page-content">
+            <div class="panel">
+                <div class="panel-header">
+                    <span class="panel-title">System Settings</span>
                 </div>
-                <div class="form-group">
-                    <label for="description">Description</label>
-                    <textarea class="form-control" id="description" placeholder="Detailed description of the issue..." required></textarea>
+                <div style="padding: 1.5rem;">
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Company Name</label>
+                        <input type="text" style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px;" value="Your Company">
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Department Name</label>
+                        <input type="text" style="width: 100%; padding: 0.5rem; border: 1px solid #ced4da; border-radius: 4px;" value="IT Department">
+                    </div>
+                    
+                    <button class="btn btn-primary">Save Settings</button>
                 </div>
-                <div class="form-group">
-                    <label for="deviceType">Device Type</label>
-                    <select class="form-control" id="deviceType" required>
-                        <option value="" disabled selected>Select device type</option>
-                        <option value="computer">Computer (Desktop/Laptop)</option>
-                        <option value="mobile">Mobile Device</option>
-                        <option value="printer">Printer/Scanner</option>
-                        <option value="network">Network Equipment</option>
-                        <option value="audiovisual">Audio/Visual Equipment</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="deviceModel">Device Model</label>
-                    <input type="text" class="form-control" id="deviceModel" placeholder="e.g., Dell XPS 15, iPhone 13, etc.">
-                </div>
-                <div class="form-group">
-                    <label for="serialNumber">Serial Number (if available)</label>
-                    <input type="text" class="form-control" id="serialNumber" placeholder="Device serial number">
-                </div>
-                <div class="form-group">
-                    <label for="requester">Requester</label>
-                    <input type="text" class="form-control" id="requester" placeholder="Your name" required>
-                </div>
-                <div class="form-group">
-                    <label for="department">Department</label>
-                    <select class="form-control" id="department" required>
-                        <option value="" disabled selected>Select department</option>
-                        <option value="executive">Executive</option>
-                        <option value="finance">Finance</option>
-                        <option value="hr">Human Resources</option>
-                        <option value="it">IT</option>
-                        <option value="marketing">Marketing</option>
-                        <option value="operations">Operations</option>
-                        <option value="sales">Sales</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="priority">Priority</label>
-                    <select class="form-control" id="priority" required>
-                        <option value="" disabled selected>Select priority</option>
-                        <option value="low">Low - Not time sensitive</option>
-                        <option value="medium">Medium - Needed soon</option>
-                        <option value="high">High - Urgent issue</option>
-                    </select>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary close-btn">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Ticket</button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
     
     <script>
-        // Simple JavaScript to handle modal functionality
+        // Simple navigation functionality
         document.addEventListener('DOMContentLoaded', function() {
-            const modal = document.getElementById('newTicketModal');
-            const openModalBtn = document.getElementById('newTicketBtn');
-            const closeButtons = document.querySelectorAll('.close, .close-btn');
-            const ticketForm = document.getElementById('newTicketForm');
+            const navLinks = document.querySelectorAll('.nav-link');
+            const pages = document.querySelectorAll('.page-content');
             
-            // Open modal
-            openModalBtn.addEventListener('click', function() {
-                modal.style.display = 'flex';
-            });
-            
-            // Close modal
-            closeButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    modal.style.display = 'none';
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all links
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    
+                    // Add active class to clicked link
+                    this.classList.add('active');
+                    
+                    // Hide all pages
+                    pages.forEach(page => page.classList.remove('active'));
+                    
+                    // Show selected page
+                    const pageId = this.getAttribute('data-page');
+                    document.getElementById(pageId).classList.add('active');
                 });
-            });
-            
-            // Close modal when clicking outside
-            window.addEventListener('click', function(event) {
-                if (event.target === modal) {
-                    modal.style.display = 'none';
-                }
-            });
-            
-            // Form submission (would normally connect to backend)
-            ticketForm.addEventListener('submit', function(event) {
-                event.preventDefault();
-                alert('Ticket submitted successfully! In a real system, this would be saved to the database.');
-                modal.style.display = 'none';
-                ticketForm.reset();
             });
         });
     </script>
